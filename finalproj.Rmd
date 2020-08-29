@@ -1,0 +1,754 @@
+---
+title: "2020 NCAA Tournament Prediction with Machine Learning"
+author: "Corey Maxedon"
+date: "4/28/2020"
+output:
+  html_document:
+    css: ["/Users/coreymaxedon/Documents/Programming/GitHub/coreymaxedon.github.io/assets/css/main.css", "/Users/coreymaxedon/Documents/Programming/GitHub/coreymaxedon.github.io/assets/css/noscript.css"]
+    toc: yes
+    toc_depth: 2
+  pdf_document:
+    toc: yes
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(car)
+library(pscl)
+library(lme4)
+library(tidyverse)
+library(RLRsim)
+library(pbkrtest)
+library(data.table)
+library(randomForest)
+library(nnet)
+library(faraway)
+
+op <- options("contr.sum", "contr.poly")
+
+```
+
+\newpage
+
+# Executive Summary
+
+Sadly, the 2020 NCAA Men's Basketball tournament could not be held this year due to the coronavirus. I found data on the past four years of college basketball seasons and thought it would be interesting to see if I could accurately represent what could have been. Based on several variables in this dataset found in Appendix 1 and 2.1, is it possible to predict the teams that will make the tournament using machine learning techniques? Also, based on this information, can we give an estimate of the round this team will make it to? These are great questions to be answered using a variety of different predictive models. 
+
+First, we should examine the data (Appendix 2.1). There are several variables that could have a potentially high correlation. The variance inflation factors in Appendix 3.1 with extremely high correlation are effective field goal percentage of shots taken and allowed. This is nearly a direct calculation of other variables presented in the dataset. Another variable with a high inflation factor is the power rating. This rating is more or less a summary of a team based on several factors presented in the data already. The last two factors of potential concern are offensive and defensive efficiency. Model selection should be able to take care of this multicollinearity. We can check our final models with diagnostic plots. The last step is to view the correlation of our potential responses and regressors with a correlation matrix. My main variable of interest is post season wins. It seems there is high correlation between several variables and the response, Appendix 3.2. We can plot some of the variables with the highest correlation. The scatter plot in Appendix 3.3 shows the relationships between post season wins and the regressors. There does appear to be significant multicollinearity as we found before.
+
+Before we begin setting up models, it is necessary to check if the regressors need transformations. The Box-Cox method provides significant evidence for transformations, Appendix 3.4. Testing the case with no transformations gives a p-value of less than 0.0001 so transformations are clearly needed, but even after testing the recommended transformations, the p-value was still below 0.0001. It seems another factor is at play such as the multicollinearity noted previously. We can again proceed with caution. Model selection and diagnostic checks should give us a better look at what is going on later.  Besides, the recommended transformations hurt the interpretability of our results quite substantially. Since we want models that perform classification, we are unable to test the transformation of our response.
+
+First, we build a model using all potentially useful variables, Appendix 4. We can check for outliers before we begin model selection. The halfnorm plot in Appendix 4.1 suggests observation 1329 is an outlier. Upon further inspection, this team made the tournament with a terrible record among other poor variables. We will continue the analysis with this team since removing this team is unjustified. By reviewing the summary of our first model, we see several variables are insignificant. We will test removing the variable with the highest p-value in the summary of the model recursively until the ANOVA test provides evidence to accept the full model. The method is not exact, but it gives us a good idea of the variables and models that are most significant. The variables to be kept in the model were power rating, turnover rate, and wins above the bubble to name a few. Even the random effects were not significant with this final model (Appendix 4.2). Next, diagnostic checks were completed once more (Appendix 4.3). Observation 1329 was still an outlier, but the jump in trend is relatively insignificant. There is still some pretty high VIF results, but they are much lower than before. It seems this model does not drastically break any assumptions. Last, we can test the model's predictive ability. By looking at a ROC curve (Appendix 4.4), we find the best threshold for acceptance to balance the sensitivity and specificity appears to be 0.22. With this, our training error rate was 0.125. The testing error was 0.127 for 2019. Now, we can estimate the round at which a team will go out.
+
+In this multinomial model, I will show a model that tries to predict all rounds (Appendix 5). Model selection was simple and chose a model with similar variables to the previous model except two point shooting percentage is now included in the final model. This model also allows for easy interpretation of variables. For example, power rating is still a big indictator for success in the tournament, but as a team progresses, other variables become more important. A look at the training error shows this model does better than the previous in predicting teams to make the tournament and even does a fair job in predicting the round a team will make it to. Another nice feature about this model is the ability to view important factors associated with each round of the tournament. The error is around 75%, but each team has 9 options to land on (Appendix 5.2). This model did predict the champion and second place winner all four years (Appendix 5.1), but that could indicate the model is over fit on the training set. This model performed much better than the binomial model at predicting a team to make it to the tournament, but it may be useful to look at a model trained on the teams already known to make it to the tournament and see where they are predicted to make it in the tournament.
+
+By setting up a model given a team has already made it into the tournament (Appendix 6), a summary of the most significant model shows power rating (both previous models biggest determining factor) is no longer included. The current model shows the highest magnitude predictor is now turnover rate which is somewhat interesting since it did not have a huge effect in the previous models and one does not typically view turnover rate as the statistic that wins games. Now, we see the error in the training set is still high (Appendix 6.2), but it is drastically reduced from the previous approach. The test set error reiterates this point. The model was actually even able to predict the correct champion in the test set. The next step would be to try out this line of thinking with a random forest. 
+
+This research question seems like it would be best fit for a categorical tree. We lose the quantitative inference capability about specific regressors the last models gave, but the main point of this analysis is prediction. We will compare the performance of a bagging and a random forest approach (Appendix 7). The bagging approach produced lower out of bag error as well as lower testing error per round. The bagging approach even correctly predicted the champion. From looking at importance we see both models put strong emphasis on wins above the bubble. This is the first model to do so. We will continue using the bagging model and try out a model trained on teams already in the tournament like before.
+
+We fit a model in the same manner as the second multinomial model. The testing error is worse than the multinomial model (Appendix 8). We see the importance of wins above the bubble dropped as power rating became important once more. It will not be necessary to combine models on making the tournament versus round performance for the final prediction of the 2020 season. The multinomial model that considered all teams at once performed the best overall. This is nice since the model leaves interpretability of regressors intact. The table in Appendix 9 gives a comparison of error among the models created.
+
+Each model has it own strengths. The binomial model was by far the least useful model in terms of error. Every other model was able to predict teams making the tournament much better. It appears the bag model performs the best on test data. It was also great at predicting teams to make the tournament. The multinomial model came in at a close second, but test error plays a big role when prediction is desired. We can try predicting the NCAA tournament for 2020 using both models as a comparison.
+
+The final prediction of the tournament in 2020, which never happened due to the coronavirus, is given in Appendix 10. In this prediction, we will put more weight in the bag model's predictions due to the performance seen in the error table (Appendix 9). The summary of the predictions (Appendix 10) shows the bag model predicted 303 teams not making the tournament and 2 teams making it past the round of 32 and the multinomial model predicted 309 teams not making the tournament and 3 teams making it past the round of 32. We can view the teams the bag model predicted to make it to the Elite 8 which were Kansas and Gonzaga. The multinomial model also had Kansas and Gonzaga in the Elite 8 with Dayton coming out of nowhere and being the runner up in the tournament. The bag model predicted Dayton to go out in the round of 32. Last, but not least, we can see the comparison of teams in the Big Ten and their predicted round at which they lost in (Appendix 10.2). Indiana was predicted to go out in the first round in both models while, our rival, Purdue did not even make the tournament in either model.
+
+Due to the error seen in the training and testing sets with these models, we cannot put much weight in their predictions, but the teams projected to make the tournament can almost be guaranteed. Every year sees drastic variability with the presence of "bracket busting" teams. It is difficult to identify winning teams without being able to compare specific matchups. This analysis gives a good measure of minimum performance based on overall team statistics alone. The main take away is the various impactful predictors an above average team possesses in order to make it late into the tournament such as power rating and wins above the bubble. The final prediction ability is less than desired, but this has been an interesting look on what could have been through machine learning.
+
+
+\newpage
+
+# Methods and Results
+
+# Appendix 1. Variable Definitions
+
+## Team Information
+
+YEAR: Season
+
+TEAM: The Division I college basketball school
+
+CONF: The Athletic Conference in which the school participates in 
+
+          A10 = Atlantic 10
+
+          ACC = Atlantic Coast Conference
+
+          AE = America East
+
+          Amer = American
+
+          ASun = ASUN
+
+          B10 = Big Ten
+
+          B12 = Big 12
+
+          BE = Big East
+
+          BSky = Big Sky
+
+          BSth = Big South
+
+          BW = Big West
+
+          CAA = Colonial Athletic Association
+
+          CUSA = Conference USA
+
+          Horz = Horizon League
+
+          IND = Independent schools
+
+          Ivy = Ivy League
+
+          MAAC = Metro Atlantic Athletic Conference
+
+          MAC = Mid-American Conference
+
+          MEAC = Mid-Eastern Athletic Conference
+
+          MVC = Missouri Valley Conference
+
+          MWC = Mountain West
+
+          NEC = Northeast Conference
+
+          OVC = Ohio Valley Conference
+
+          P12 = Pac-12
+
+          Pat = Patriot League
+
+          SB = Sun Belt
+
+          SC = Southern Conference
+
+          SEC = South Eastern Conference
+
+          Slnd = Southland Conference
+
+          Sum = Summit League
+
+          SWAC = Southwestern Athletic Conference
+
+          WAC = Western Athletic Conference
+
+          WCC = West Coast Conference
+
+
+## Tournament Information
+
+SEED: Seed in the NCAA March Madness Tournament
+
+TRNMT: Made tournament, yes or no
+
+PS_WINS: Post season wins in NCAA tournament
+
+POSTSEASON: Round where the given team was eliminated or where their season ended
+
+          R68 = First Four
+
+          R64 = Round of 64
+
+          R32 = Round of 32
+
+          S16 = Sweet Sixteen
+
+          E8 = Elite Eight
+
+          F4 = Final Four
+
+          2ND = Runner-up
+
+          Champions = Winner of the NCAA March Madness Tournament for that given year
+
+
+## Team Statistics
+
+G: Number of games played in total
+
+W: Number of games won in total
+
+BARTHAG: Power Rating (Chance of beating an average Division I team)
+
+WAB: Wins Above Bubble (The bubble refers to the cut off between making the NCAA March Madness Tournament and not making it)
+
+
+## Offensive Statistics
+
+ADJOE: Adjusted Offensive Efficiency (An estimate of the offensive efficiency (points scored per 100 possessions) a team would have against the average Division I 
+defense)
+
+EFG_O: Effective Field Goal Percentage Shot
+
+TOR: Turnover Percentage Allowed (Turnover Rate)
+
+ORB: Offensive Rebound Percentage
+
+FTR : Free Throw Rate (How often the given team shoots Free Throws)
+
+TWO_P_O: Two-Point Shooting Percentage
+
+THREE_P_O: Three-Point Shooting Percentage
+
+ADJ_T: Adjusted Tempo (An estimate of the tempo (possessions per 40 minutes) a team would have against the team that wants to play at an average Division I tempo)
+
+
+## Defensive Statistics
+
+ADJDE: Adjusted Defensive Efficiency (An estimate of the defensive efficiency (points allowed per 100 possessions) a team would have against the average Division I 
+offense)
+
+EFG_D: Effective Field Goal Percentage Allowed
+
+TORD: Turnover Percentage Committed (Steal Rate)
+
+DRB: Defensive Rebound Percentage
+
+FTRD: Free Throw Rate Allowed
+
+TWO_P_D: Two-Point Shooting Percentage Allowed
+
+THREE_P_D: Three-Point Shooting Percentage Allowed
+
+\newpage
+
+# Appendix 2. Data Manipulation
+
+```{r}
+# Read Data into an Object
+# https://www.kaggle.com/andrewsundberg/college-basketball-dataset/data
+raw_data_15_19 = fread("cbb.csv")
+raw_data_20 = fread("cbb20.csv")
+
+# Combining Dataframes
+raw_data_20 <- raw_data_20[,-c("RK")] #shows rank which isn't included in other years
+raw_data_20 <- raw_data_20 %>%
+                  mutate(POSTSEASON="No Tournament", #including arbitrary values so dataframes match columns
+                         SEED=99,
+                         YEAR=2020)
+raw_data <- bind_rows(raw_data_15_19, raw_data_20)
+
+# Remove unneeded dataframes
+rm(raw_data_15_19)
+rm(raw_data_20)
+
+```
+
+```{r}
+# View Data
+summary(raw_data) #notice NAs
+
+# Data Cleaning
+raw_data$POSTSEASON[is.na(raw_data$POSTSEASON)] = "No Tournament" # removing NAs
+raw_data$SEED[is.na(raw_data$SEED)] = 99
+raw_data <- raw_data %>%
+                mutate(TWO_P_O = `2P_O`,  # Not a good naming format for R
+                       TWO_P_D = `2P_D`,
+                       THREE_P_O = `3P_O`,
+                       THREE_P_D = `3P_D`,
+                       TRNMT = ifelse(POSTSEASON=="No Tournament", "No", "Yes")) %>%
+                select(everything(), -c(`2P_O`, `2P_D`, `3P_O`, `3P_D`))
+raw_data$POSTSEASON <- factor(raw_data$POSTSEASON, order = TRUE, levels = c('No Tournament', 'R68', 'R64',
+                                                                            'R32', 'S16', 'E8', 'F4', '2ND',
+                                                                            'Champions'))
+raw_data$PS_WINS = ifelse(as.numeric(raw_data$POSTSEASON) - 3 < 0, 0, as.numeric(raw_data$POSTSEASON) - 3)
+
+# Changing Data Types
+raw_data$CONF <- as.factor(raw_data$CONF)
+raw_data$TRNMT <- as.factor(raw_data$TRNMT)
+raw_data$YEAR <- as.factor(raw_data$YEAR)         # make year start at zero
+
+# Data Cleaning Done
+clean_data <- raw_data
+
+```
+
+## Appendix 2.1. View Data
+
+```{r}
+# View Data Attributes
+head(clean_data)
+summary(clean_data)
+
+```
+
+```{r}
+# Separate data for train and test sets
+train_data <- clean_data[which(clean_data$YEAR==2015|clean_data$YEAR==2016|clean_data$YEAR==2017|clean_data$YEAR==2018), ]
+test_data_19 <- clean_data[which(clean_data$YEAR==2019), ]
+test_data_20 <- clean_data[which(clean_data$YEAR==2020), ]
+rm(raw_data, clean_data)
+
+```
+
+\newpage
+
+# Appendix 3. Check Assumptions
+
+## Appendix 3.1. Variance Inflation Factor
+
+```{r}
+# Check multicollinearity
+sort(faraway::vif(train_data[,-c(1:4, 18:20, 25:26)]))         # removing factors and potential responses
+
+```
+
+## Appendix 3.2. Correlation Matrix
+
+```{r}
+# correlation matrix
+round(cor(train_data[,-c(1:4, 18:20, 25)])[,c(18)], 4)
+
+```
+
+## Appendix 3.3. Scatter Plot Matrix
+
+```{r warning=FALSE}
+# Data Viz
+car::scatterplotMatrix(~PS_WINS + ADJOE + ADJDE + BARTHAG + WAB +
+                         TWO_P_D + TWO_P_O, train_data, plot.points = FALSE)
+
+```
+
+## Appendix 3.4. Transformations
+
+The scatter plot in Appendix 3.3 shows the relationships between post season wins and the regressors. There does appear to be pretty significant multicollinearity as we found before.
+
+```{r}
+# Transformations
+summary(bc_x <- powerTransform(cbind(ADJOE, ADJDE, BARTHAG, EFG_O, EFG_D,
+                                     TOR, TORD, ORB, DRB, FTR, FTRD, ADJ_T,
+                                     TWO_P_O, TWO_P_D, THREE_P_O, THREE_P_D
+                                     ) ~ 1, train_data))
+testTransform(bc_x, c(-1, 1.63, 0.71, 0.33, 1, 1, 0.5, 1.36, 1, 0.50, 0, 1, 0, 0.5, 1, 1))
+
+```
+
+\newpage
+
+# Appendix 4. Model 1: Logistic Model with Random Effects
+
+```{r warning=FALSE}
+model_binom <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D +
+                       TOR + TORD + ORB + DRB + FTR + FTRD + ADJ_T +
+                       TWO_P_O + TWO_P_D + THREE_P_O + THREE_P_D +
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+
+```
+
+## Appendix 4.1. Diagnostic Check
+
+```{r}
+halfnorm(resid(model_binom, type="pearson"))
+train_data[1329,]
+summary(model_binom)
+
+```
+
+## Appendix 4.2. Model Selection
+
+```{r}
+# Fixed Effects Test
+model_binom1 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D +             # remove DRB
+                       TOR + TORD + ORB + FTR + FTRD + ADJ_T +
+                       TWO_P_O + TWO_P_D + THREE_P_O + THREE_P_D +
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+anova(model_binom, model_binom1)                                                    # p-value: 0.8595
+summary(model_binom1)
+
+model_binom2 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D +             # remove THREE_P_O
+                       TOR + TORD + ORB + FTR + FTRD + ADJ_T +
+                       TWO_P_O + TWO_P_D + THREE_P_D +
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+anova(model_binom1, model_binom2)                                                    # p-value: 0.5832
+summary(model_binom2)
+
+model_binom3 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D +             # remove TWO_P_O
+                       TOR + TORD + ORB + FTR + FTRD + ADJ_T +
+                       TWO_P_D + THREE_P_D +
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+anova(model_binom2, model_binom3)                                                    # p-value: 0.8298
+summary(model_binom3)
+
+model_binom4 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D +             # remove ORB
+                       TOR + TORD + FTR + FTRD + ADJ_T +
+                       TWO_P_D + THREE_P_D +
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+anova(model_binom3, model_binom4)                                                    # p-value: 0.5077
+summary(model_binom4)
+
+model_binom5 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D +             # remove ADJ_T
+                       TOR + TORD + FTR + FTRD +
+                       TWO_P_D + THREE_P_D +
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+anova(model_binom4, model_binom5)                                                    # p-value: 0.4698
+summary(model_binom5)
+
+model_binom6 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D +             # remove FTRD
+                       TOR + TORD + FTR +
+                       TWO_P_D + THREE_P_D +
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+anova(model_binom5, model_binom6)                                                    # p-value: 0.3498
+summary(model_binom6)
+
+model_binom7 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D +             # remove THREE_P_D
+                       TOR + TORD + FTR +
+                       TWO_P_D +
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+anova(model_binom6, model_binom7)                                                    # p-value: 0.2336
+summary(model_binom7)
+
+model_binom8 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D +             # remove TWO_P_D
+                       TOR + TORD + FTR +
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+anova(model_binom7, model_binom8)                                                    # p-value: 0.488
+summary(model_binom8)
+
+model_binom9 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O +                      # remove EFG_D
+                       TOR + TORD + FTR +
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+anova(model_binom8, model_binom9)                                                    # p-value: 0.108
+summary(model_binom9)
+
+model_binom10 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O +                      # remove TORD
+                       TOR + FTR +
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+anova(model_binom9, model_binom10)                                                    # p-value: 0.1183
+summary(model_binom10)
+
+model_binom11 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O + FTR +                # remove TOR
+                       WAB + (1|CONF), nAGQ = 25, family = "binomial", train_data)
+anova(model_binom10, model_binom11)                                                    # p-value: 0.03884 so do not remove TOR
+summary(model_binom11)
+
+
+# Random Effects
+model_binom12 <- glmer(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O +                      # REML = F
+                       TOR + FTR +
+                       WAB + (1|CONF), family = "binomial", train_data)
+model_binom13 <- glm(TRNMT ~ ADJOE + ADJDE + BARTHAG + EFG_O +                        # remove CONF
+                       TOR + FTR +
+                       WAB, family = "binomial", train_data)
+# anova(model_binom12, model_binom13)                                                   # p-value: 1
+summary(model_binom13)
+
+```
+
+## Appendix 4.3. Post Diagnostic Checks
+
+```{r}
+# Check Diagnostics
+halfnorm(resid(model_binom13, type="pearson"))
+sort(faraway::vif(train_data[,c(5:8, 10, 14, 17)])) 
+
+```
+
+## Appendix 4.4. Prediction
+
+```{r}
+# Checking Performance
+predprob=predict(model_binom13, train_data, type="response")
+
+thresh <- seq(0.01,0.5,0.01)
+Sensitivity <- numeric(length(thresh))
+Specificity <- numeric(length(thresh))
+for(j in seq(along=thresh)){
+  pp <- ifelse(predprob < thresh[j],"No","Yes")
+  xx <- xtabs( ~ train_data$TRNMT + pp)
+  Specificity[j] <- xx[1,1]/(xx[1,1]+xx[1,2])
+  Sensitivity[j] <- xx[2,2]/(xx[2,1]+xx[2,2])
+}
+matplot(thresh,cbind(Sensitivity,Specificity),type="l",xlab="Threshold",ylab="Proportion",lty=1:2)
+plot(1-Specificity,Sensitivity,type="l")
+abline(0,1,lty=2)
+
+# Classification: Sensitivity and Specificity (ROC)
+predout=ifelse(predprob < 0.18, "No", "Yes")
+xtabs( ~ train_data$TRNMT + predout)
+
+# Training Error classification rate
+1-(988+240)/(988+240+144+32)
+
+# Testing Error classification rate
+predprob_test=predict(model_binom10, test_data_19, type="response")
+predout_test=ifelse(predprob_test < 0.18, "No", "Yes")
+xtabs( ~ test_data_19$TRNMT + predout_test)
+1-(247+61)/(247+61+7+38)
+
+```
+
+\newpage
+
+# Appendix 5. Model 2: Multinomial Model - All possibilities
+
+```{r results='hide'}
+mmod <- multinom(POSTSEASON ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D + TOR +
+                   TORD + ORB + DRB + FTR + FTRD + ADJ_T + TWO_P_O + TWO_P_D +
+                   THREE_P_O + THREE_P_D + WAB + CONF, train_data, trace = FALSE)
+mmod1 <- step(mmod, trace=FALSE)
+
+```
+
+## Appendix 5.1. Prediction
+
+```{r}
+summary(mmod1)
+
+# Train Error
+mmod1.pred <- predict(mmod1, train_data)
+fct_expand(mmod1.pred, "R68")
+mmod1.table <- table(mmod1.pred, as_vector(train_data[,"POSTSEASON"]))
+mmod1.error <- numeric(dim(mmod1.table)[1])
+for(i in 1:dim(mmod1.table)[1]){
+  mmod1.error[i] = round(((1-(mmod1.table[i,i])/(sum(mmod1.table[,i])))*100), 4)
+}
+mmod1.error.table <- data.frame(names(mmod1.table[,1]), as.data.frame(mmod1.error))
+colnames(mmod1.error.table) <- c("Round", "% Error")
+
+# Test Error
+mmod1.pred.test <- predict(mmod1, test_data_19)
+mmod1.table.test <- table(mmod1.pred.test, as_vector(test_data_19[,"POSTSEASON"]))
+mmod1.error.test <- numeric(dim(mmod1.table.test)[1])
+for(i in 1:dim(mmod1.table.test)[1]){
+  mmod1.error.test[i] = round(((1-(mmod1.table.test[i,i])/(sum(mmod1.table.test[,i])))*100), 4)
+}
+mmod1.error.test.table <- data.frame(names(mmod1.table.test[,1]), mmod1.error.test)
+colnames(mmod1.error.test.table) <- c("Round", "% Error")
+
+```
+
+## Appendix 5.2. Error Tables (%)
+
+```{r}
+knitr::kable(mmod1.error.table)
+knitr::kable(mmod1.error.test.table)
+
+```
+
+\newpage
+
+# Appendix 6. Model 3: Multinomial Model - Round Selection Given Already in Tournament
+
+```{r results='hide'}
+train_given_trnmt <- train_data[which(train_data$TRNMT=="Yes"), ]
+train_given_trnmt$POSTSEASON <- as.character(train_given_trnmt$POSTSEASON)
+train_given_trnmt$POSTSEASON <- as.factor(train_given_trnmt$POSTSEASON)
+test_given_trnmt_19 <- test_data_19[which(test_data_19$TRNMT=="Yes"), ]
+test_given_trnmt_19$POSTSEASON <- as.character(test_given_trnmt_19$POSTSEASON)
+test_given_trnmt_19$POSTSEASON <- as.factor(test_given_trnmt_19$POSTSEASON)
+
+mmod2 <- multinom(POSTSEASON ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D + TOR +
+                   TORD + ORB + DRB + FTR + FTRD + ADJ_T + TWO_P_O + TWO_P_D +
+                   THREE_P_O + THREE_P_D + WAB + CONF, train_given_trnmt, trace = FALSE)
+mmod3 <- step(mmod2, trace=0)
+
+```
+
+## Appendix 6.1. Prediction
+
+```{r}
+summary(mmod3)
+
+# Train Error
+mmod3.pred <- predict(mmod3, train_given_trnmt)
+mmod3.table <- table(mmod3.pred, as_vector(train_given_trnmt[,"POSTSEASON"]))
+mmod3.error <- numeric(dim(mmod3.table)[1])
+for(i in 1:dim(mmod3.table)[1]){
+  mmod3.error[i] = round(((1-(mmod3.table[i,i])/(sum(mmod3.table[,i])))*100), 4)
+}
+mmod3.error.table <- data.frame(names(mmod3.table[,1]), mmod3.error)
+colnames(mmod3.error.table) <- c("Round", "% Error")
+
+# Test Error
+mmod3.pred.test <- predict(mmod3, test_given_trnmt_19)
+mmod3.table.test <- table(mmod3.pred.test, as_vector(test_given_trnmt_19[,"POSTSEASON"]))
+mmod3.error.test <- numeric(dim(mmod3.table.test)[1])
+for(i in 1:dim(mmod3.table.test)[1]){
+  mmod3.error.test[i] = round(((1-(mmod3.table.test[i,i])/(sum(mmod3.table.test[,i])))*100), 4)
+}
+mmod3.error.test.table <- data.frame(names(mmod3.table.test[,1]), mmod3.error.test)
+colnames(mmod3.error.test.table) <- c("Round", "% Error")
+
+```
+
+## Appendix 6.2. Error Tables (%)
+
+```{r}
+knitr::kable(mmod3.error.table)
+knitr::kable(mmod3.error.test.table)
+
+```
+
+\newpage
+
+# Appendix 7. Model 4: Classification Tree - All possibilities
+
+```{r}
+# Bagging
+bag.cbb <- randomForest(POSTSEASON ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D + TOR +
+                   TORD + ORB + DRB + FTR + FTRD + ADJ_T + TWO_P_O + TWO_P_D +
+                   THREE_P_O + THREE_P_D + WAB + CONF, train_data, mtry=18, importance=T)
+bag.cbb
+importance(bag.cbb)
+
+# Random Forest
+rf.cbb <- randomForest(POSTSEASON ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D + TOR +
+                   TORD + ORB + DRB + FTR + FTRD + ADJ_T + TWO_P_O + TWO_P_D +
+                   THREE_P_O + THREE_P_D + WAB + CONF, train_data, importance=T)
+rf.cbb
+importance(rf.cbb)
+
+```
+
+## Appendix 7.1. Prediction
+
+```{r}
+# Testing Error - Bagging
+bag.pred_test <- predict(bag.cbb, test_data_19, type = "class")
+bag.table <- table(bag.pred_test, as_vector(test_data_19[,"POSTSEASON"]))
+bag.error <- numeric(dim(bag.table)[1])
+for(i in 1:dim(bag.table)[1]){
+  bag.error[i] = round(((1-(bag.table[i,i])/(sum(bag.table[,i])))*100), 4)
+}
+bag.error.table <- data.frame(names(bag.table[,1]), bag.error)
+colnames(bag.error.table) <- c("Round", "% Error")
+
+# Testing Error - Random Forest
+rf.pred_test <- predict(rf.cbb, test_data_19, type = "class")
+rf.table <- table(rf.pred_test, as_vector(test_data_19[,"POSTSEASON"]))
+rf.error <- numeric(dim(rf.table)[1])
+for(i in 1:dim(rf.table)[1]){
+  rf.error[i] = round(((1-(rf.table[i,i])/(sum(rf.table[,i])))*100), 4)
+}
+rf.error.table <- data.frame(names(rf.table[,1]), rf.error)
+colnames(rf.error.table) <- c("Round", "% Error")
+
+```
+
+## Appendix 7.2. Error Tables (%)
+
+```{r}
+knitr::kable(bag.error.table)
+knitr::kable(rf.error.table)
+
+```
+
+\newpage
+
+# Appendix 8. Model 5: Classification Tree - Round Selection Given Already in Tournament
+
+```{r}
+# Bagging
+bag.cbb_trmnt <- randomForest(POSTSEASON ~ ADJOE + ADJDE + BARTHAG + EFG_O + EFG_D + TOR +
+                   TORD + ORB + DRB + FTR + FTRD + ADJ_T + TWO_P_O + TWO_P_D +
+                   THREE_P_O + THREE_P_D + WAB + CONF, train_given_trnmt, mtry=18, importance=T)
+bag.cbb_trmnt
+importance(bag.cbb_trmnt)
+
+```
+
+## Appendix 8.1. Prediction
+
+```{r}
+# Testing Error - Bagging
+bag1.pred_test <- predict(bag.cbb_trmnt, test_given_trnmt_19, type = "class")
+bag1.table <- table(bag1.pred_test, as_vector(test_given_trnmt_19[,"POSTSEASON"]))
+bag1.error <- numeric(dim(bag1.table)[1])
+for(i in 1:dim(bag1.table)[1]){
+  bag1.error[i] = round(((1-(bag1.table[i,i])/(sum(bag1.table[,i])))*100), 4)
+}
+bag1.error.table <- data.frame(names(bag1.table[,1]), bag1.error)
+colnames(bag1.error.table) <- c("Round", "% Error")
+
+```
+
+## Appendix 8.2. Error Table (%)
+
+```{r}
+knitr::kable(bag1.error.table)
+
+```
+
+\newpage
+
+# Appendix 9. Full Error Table (%)
+
+```{r}
+# Model 1: Binomial
+binom.table.error <- xtabs( ~ train_data$TRNMT + predout)
+binom.error = round((1-(binom.table.error[1,1]+binom.table.error[2,2])/(sum(binom.table.error)))*100, 4)
+binom.error.full <- c(binom.error, rep(NA, 8))
+# Testing Error classification rate
+binom.table.error.test <- xtabs( ~ test_data_19$TRNMT + predout_test)
+binom.error.test = round((1-(binom.table.error.test[1,1]+binom.table.error.test[2,2])/(sum(binom.table.error.test)))*100, 4)
+binom.error.test.full <- c(binom.error.test, rep(NA, 8))
+
+# Model 2: Multi
+
+# Model 3: Multi
+mmod3.error.full <- c(NA, mmod3.error)
+mmod3.error.test.full <- c(NA, mmod3.error.test)
+
+# Model 4: RF
+bag.error.train <- round(bag.cbb$confusion[,"class.error"]*100, 4)
+rf.error.train <- round(rf.cbb$confusion[,"class.error"]*100, 4)
+
+
+# Model 5: RF
+bag1.error.train <- round(bag.cbb_trmnt$confusion[,"class.error"]*100, 4)
+bag1.error.train.full <- c(NA, bag1.error.train)
+bag1.error.full <- c(NA, bag1.error)
+
+# Final Table
+mini.error.table <- data.frame(mmod3.error.full, mmod3.error.test.full, bag1.error.train.full, bag1.error.full)
+mini.error.table <- mini.error.table[c(1, 8, 7, 6, 9, 4, 5, 2, 3),]               # correcting order to match other data
+full.error.table1 <- data.frame(binom.error.full, binom.error.test.full,
+                                  mmod1.error, mmod1.error.test, bag.error.train, 
+                                  bag.error)
+full.error.table2 <- data.frame(rf.error.train, rf.error, mini.error.table)
+names(full.error.table1) <- c("Binom. Train", "Binom. Test", "Multi. Train", "Multi. Test",
+                             "Bag Train", "Bag Test")
+names(full.error.table2) <- c("RF Train", "RF Test", "Sp. Multi. Train", 
+                             "Sp. Multi. Test", "Sp. Bag Train", "Sp. Bag Test")
+
+knitr::kable(full.error.table1)
+knitr::kable(full.error.table2)
+
+```
+
+\newpage
+
+# Appendix 10. 2020 March Madness Predictions
+
+```{r}
+bag.pred_test_20 <- predict(bag.cbb, test_data_20, type = "class")
+mmod.pred_test_20 <- predict(mmod1, test_data_20, type = "class")
+final_20 <- data.frame(test_data_20, bag.pred_test_20, mmod.pred_test_20)
+
+summary(final_20[,c("bag.pred_test_20", "mmod.pred_test_20")])
+
+```
+
+## Appendix 10.1. Late Round Predictions
+
+```{r}
+final_20[which(final_20$bag.pred_test_20=="E8"), c("TEAM", "bag.pred_test_20")]
+final_20[which(final_20$mmod.pred_test_20=="E8"), c("TEAM", "mmod.pred_test_20")]
+final_20[which(final_20$mmod.pred_test_20=="2ND"), c("TEAM", "mmod.pred_test_20")]
+
+```
+
+## Appendix 10.2. Big Ten Predictions
+
+```{r}
+final_20[which(final_20$CONF=="B10"), c("TEAM", "bag.pred_test_20", "mmod.pred_test_20")]
+
+```
+
+```{r}
+options(op)
+
+```
